@@ -40,7 +40,7 @@ export default function LandingPage() {
               Key Features
             </h2>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-8 sm-mobile:grid-cols-2 md-mobile:grid-cols-3">
+          <div className="mt-12 space-y-4">
             <FeatureCard
               icon={<Users className="h-6 w-6" />}
               title="Student Management"
@@ -76,7 +76,7 @@ export default function LandingPage() {
               Discover our range of business management solutions
             </p>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-8 sm-mobile:grid-cols-2 md-mobile:grid-cols-3">
+          <div className="mt-12 space-y-4">
             <ProjectCard
               icon={<Pill className="h-6 w-6" />}
               title="Clinic Management"
@@ -115,10 +115,14 @@ export default function LandingPage() {
 
 function FeatureCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
   return (
-    <div className="rounded-lg bg-white p-6 shadow-lg transition-all hover:shadow-xl">
-      <div className="mb-4 text-[#1E88E5]">{icon}</div>
-      <h3 className="mb-2 text-xl font-semibold text-gray-900">{title}</h3>
-      <p className="text-gray-600">{description}</p>
+    <div className="flex items-center gap-4 rounded-lg bg-white p-4 shadow-lg transition-all hover:shadow-xl sm-mobile:p-5 md-mobile:p-6">
+      <div className="flex-shrink-0 rounded-full bg-blue-50 p-3 text-[#1E88E5]">
+        {icon}
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900 sm-mobile:text-xl md-mobile:text-2xl">{title}</h3>
+        <p className="mt-1 text-sm text-gray-600 sm-mobile:text-base md-mobile:text-lg">{description}</p>
+      </div>
     </div>
   )
 }
@@ -129,11 +133,15 @@ function ProjectCard({ icon, title, description, link }: { icon: React.ReactNode
       href={link}
       target="_blank"
       rel="noopener noreferrer"
-      className="group rounded-lg bg-white p-6 shadow-lg transition-all hover:shadow-xl"
+      className="group flex items-center gap-4 rounded-lg bg-white p-4 shadow-lg transition-all hover:shadow-xl sm-mobile:p-5 md-mobile:p-6"
     >
-      <div className="mb-4 text-[#2ECC71] group-hover:text-[#27AE60]">{icon}</div>
-      <h3 className="mb-2 text-xl font-semibold text-gray-900">{title}</h3>
-      <p className="text-gray-600">{description}</p>
+      <div className="flex-shrink-0 rounded-full bg-green-50 p-3 text-[#2ECC71] group-hover:text-[#27AE60]">
+        {icon}
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-gray-900 sm-mobile:text-xl md-mobile:text-2xl">{title}</h3>
+        <p className="mt-1 text-sm text-gray-600 sm-mobile:text-base md-mobile:text-lg">{description}</p>
+      </div>
     </a>
   )
 }
