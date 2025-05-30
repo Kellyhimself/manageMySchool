@@ -3,9 +3,6 @@ import { notificationService } from './notification.service'
 import type { Database } from '@/types/supabase'
 import { getDB } from '@/lib/indexeddb/client'
 import { addToSyncQueue } from '@/lib/sync/sync-service'
-import { revalidatePath } from 'next/cache'
-import { cookies } from 'next/headers'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 
 type ReportCard = Database['public']['Tables']['report_cards']['Row']
 type Exam = Database['public']['Tables']['exams']['Row']
@@ -84,7 +81,8 @@ export const reportCardService = {
           principal_remarks: null,
           parent_signature: false,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          school_id: schoolId
         }
 
         // Save to database
@@ -194,7 +192,7 @@ School Administration
   }
 }
 
-// Server-side actions
+// Client-side function to generate and send report cards
 export async function generateAndSendReportCards(
   schoolId: string,
   studentIds: string[],
@@ -203,13 +201,6 @@ export async function generateAndSendReportCards(
   notificationType: 'sms' | 'email' | 'both'
 ) {
   try {
-    const supabase = createServerComponentClient<Database>({ cookies })
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session?.user) {
-      throw new Error('Unauthorized')
-    }
-
     // Generate report cards
     const reportCards = await reportCardService.generateReportCards(
       schoolId,
@@ -224,7 +215,6 @@ export async function generateAndSendReportCards(
       notificationType
     )
 
-    revalidatePath('/exams/report-cards')
     return { success: true }
   } catch (error) {
     console.error('Failed to generate and send report cards:', error)

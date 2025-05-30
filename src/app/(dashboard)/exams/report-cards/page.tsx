@@ -81,7 +81,7 @@ export default function ReportCardsPage() {
       } else {
         toast.error(result.error || 'Failed to generate and send report cards');
       }
-    } catch {
+    } catch (error) {
       toast.error('An error occurred while generating report cards');
     } finally {
       setIsGenerating(false);
@@ -190,9 +190,7 @@ export default function ReportCardsPage() {
 
                 <ScrollArea className="h-[400px] rounded-md border p-4">
                   <div className="space-y-4">
-                    {isLoading ? (
-                      <div className="text-center py-4">Loading students...</div>
-                    ) : filteredStudents.length === 0 ? (
+                    {filteredStudents.length === 0 ? (
                       <div className="text-center py-4">No students found</div>
                     ) : (
                       filteredStudents.map((student) => (
