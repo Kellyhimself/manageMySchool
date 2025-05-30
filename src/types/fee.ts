@@ -3,39 +3,49 @@ export interface Fee {
   student_id: string
   school_id: string
   amount: number
-  amount_paid?: number
+  amount_paid: number | null
   date: string
-  due_date: string
-  status: 'pending' | 'paid' | 'overdue'
-  description?: string
-  payment_method?: 'mpesa' | 'bank' | 'cash'
-  payment_reference?: string
-  payment_date?: string
-  receipt_url?: string
-  payment_details?: {
-    paybill_number?: string
-    account_number?: string
-    bank_name?: string
-    bank_account?: string
-    bank_slip_number?: string
-  }
-  student_name?: string
+  due_date: string | null
+  status: string
+  description: string | null
+  payment_method: string | null
+  payment_reference: string | null
+  payment_date: string | null
+  receipt_url: string | null
+  payment_details: any | null
   created_at: string
   updated_at: string
+  sync_status: 'pending' | 'synced'
+  fee_type: string | null
+  student_admission_number: string | null
+  student_name: string | null
 }
 
-export interface CreateFeeDTO {
+export interface FeeCreate {
   student_id: string
   school_id: string
   amount: number
-  description?: string
-  due_date: string
-  date?: string
-  status?: 'pending' | 'paid' | 'overdue'
+  date: string
+  due_date?: string | null
+  description?: string | null
+  fee_type?: string | null
+  student_admission_number?: string | null
 }
 
-export interface UpdateFeeDTO extends Partial<CreateFeeDTO> {
-  id: string
+export interface FeeUpdate {
+  amount?: number
+  amount_paid?: number | null
+  date?: string
+  due_date?: string | null
+  status?: string
+  description?: string | null
+  payment_method?: string | null
+  payment_reference?: string | null
+  payment_date?: string | null
+  receipt_url?: string | null
+  payment_details?: any | null
+  fee_type?: string | null
+  student_admission_number?: string | null
 }
 
 export interface FeeFilters {
@@ -50,12 +60,11 @@ export interface FeeFilters {
 
 export interface PaymentDetails {
   amount: number
-  paymentMethod: 'mpesa' | 'bank' | 'cash'
+  paymentMethod: string
   paymentDetails?: {
-    paybill_number?: string
-    account_number?: string
-    bank_name?: string
-    bank_account?: string
     bank_slip_number?: string
+    account_number?: string
+    paybill_number?: string
+    [key: string]: any
   }
 } 

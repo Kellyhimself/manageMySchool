@@ -1,134 +1,180 @@
 import { supabase } from '@/lib/supabase/client'
-import type { CreateStudentDTO, Student, StudentFilters, UpdateStudentDTO } from '@/types/student'
+import type { Student, StudentCreate, StudentUpdate } from '@/types/student'
+import { getDB } from '@/lib/indexeddb/client'
+import { addToSyncQueue } from '@/lib/sync/sync-service'
+import type { Database } from '@/types/supabase'
+
+type SupabaseStudent = Database['public']['Tables']['students']['Row']
+
+// Helper function to convert between online and offline student formats
+const toOnlineStudent = (student: Student): Omit<SupabaseStudent, 'id'> => {
+  const { sync_status, ...onlineStudent } = student
+  return onlineStudent
+}
+
+const toOfflineStudent = (student: SupabaseStudent): Student => {
+  return {
+    ...student,
+    sync_status: 'pending' as const
+  }
+}
 
 export const studentService = {
-  async getAll(filters?: StudentFilters): Promise<Student[]> {
-    console.log('Student service filters:', filters)
-    let query = supabase
+  async getStudents(schoolId: string): Promise<Student[]> {
+    if (!navigator.onLine) {
+      const db = await getDB()
+      const students = await db.getAllFromIndex('students', 'by-school', schoolId)
+      return students
+    }
+
+    const { data, error } = await supabase
       .from('students')
       .select('*')
-
-    if (filters?.schoolId) {
-      console.log('Adding school ID filter:', filters.schoolId)
-      query = query.eq('school_id', filters.schoolId)
-    }
-
-    if (filters?.search) {
-      console.log('Adding search filter:', filters.search)
-      query = query.or(`name.ilike.%${filters.search}%,class.ilike.%${filters.search}%`)
-    }
-
-    if (filters?.class) {
-      query = query.eq('class', filters.class)
-    }
-
-    if (filters?.sortBy) {
-      // Convert camelCase to snake_case for database columns
-      const sortBy = filters.sortBy === 'createdAt' ? 'created_at' :
-                    filters.sortBy === 'updatedAt' ? 'updated_at' :
-                    filters.sortBy
-      query = query.order(sortBy, { ascending: filters.sortOrder === 'asc' })
-    }
-
-    const { data, error } = await query
-    console.log('Query result:', { data, error })
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false })
 
     if (error) throw error
-    return data.map(student => ({
+    return data.map(toOfflineStudent)
+  },
+
+  async getStudent(id: string): Promise<Student> {
+    if (!navigator.onLine) {
+      const db = await getDB()
+      const student = await db.get('students', id)
+      if (!student) throw new Error('Student not found')
+      return student
+    }
+
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) throw error
+    return toOfflineStudent(data)
+  },
+
+  async createStudent(student: StudentCreate): Promise<Student> {
+    const now = new Date().toISOString()
+
+    // If online, let Supabase generate the ID
+    if (navigator.onLine) {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .insert(toOnlineStudent({
+            ...student,
+            id: crypto.randomUUID(), // Temporary ID for type safety
+            created_at: now,
+            updated_at: now,
+            sync_status: 'pending',
+            parent_email: student.parent_email || null,
+            admission_number: student.admission_number || null
+          }))
+          .select()
+          .single()
+
+        if (error) throw error
+
+        // Save to IndexedDB with the server-generated ID
+        const syncedStudent = toOfflineStudent(data)
+        const db = await getDB()
+        await db.put('students', syncedStudent)
+        return syncedStudent
+      } catch (error) {
+        console.error('Failed to create student online:', error)
+        // Fall through to offline creation
+      }
+    }
+
+    // Offline creation or online creation failed
+    const newStudent: Student = {
       ...student,
-      parentPhone: student.parent_phone,
-      parentEmail: student.parent_email || undefined,
-      schoolId: student.school_id,
-      createdAt: new Date(student.created_at),
-      updatedAt: new Date(student.updated_at),
-    })) as Student[]
-  },
-
-  async getById(id: string): Promise<Student> {
-    const { data, error } = await supabase
-      .from('students')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (error) throw error
-    return {
-      ...data,
-      parentPhone: data.parent_phone,
-      parentEmail: data.parent_email || undefined,
-      schoolId: data.school_id,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    } as Student
-  },
-
-  async create(student: CreateStudentDTO): Promise<Student> {
-    console.log('Creating student with data:', student)
-    const { data, error } = await supabase
-      .from('students')
-      .insert({
-        name: student.name,
-        class: student.class,
-        parent_phone: student.parent_phone,
-        parent_email: student.parent_email || null,
-        school_id: student.school_id,
-        admission_number: student.admission_number
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating student:', error)
-      throw error
+      id: crypto.randomUUID(),
+      created_at: now,
+      updated_at: now,
+      sync_status: 'pending',
+      parent_email: student.parent_email || null,
+      admission_number: student.admission_number || null
     }
 
-    return {
-      ...data,
-      parentPhone: data.parent_phone,
-      parentEmail: data.parent_email || undefined,
-      schoolId: data.school_id,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    } as Student
+    const db = await getDB()
+    await db.put('students', newStudent)
+    await addToSyncQueue('students', newStudent.id, 'create', toOnlineStudent(newStudent))
+    return newStudent
   },
 
-  async update(student: UpdateStudentDTO): Promise<Student> {
-    console.log('Updating student with data:', student)
-    const { data, error } = await supabase
-      .from('students')
-      .update({
-        name: student.name,
-        class: student.class,
-        parent_phone: student.parent_phone,
-        parent_email: student.parent_email || null,
-        school_id: student.school_id,
-        admission_number: student.admission_number
-      })
-      .eq('id', student.id)
-      .select()
-      .single()
+  async updateStudent(id: string, student: StudentUpdate): Promise<Student> {
+    const now = new Date().toISOString()
+    const db = await getDB()
+    const existingStudent = await db.get('students', id)
+    if (!existingStudent) throw new Error('Student not found')
 
-    if (error) {
-      console.error('Error updating student:', error)
-      throw error
+    const updatedStudent: Student = {
+      ...existingStudent,
+      ...student,
+      updated_at: now,
+      sync_status: 'pending' as const,
+      parent_email: student.parent_email ?? existingStudent.parent_email,
+      admission_number: student.admission_number ?? existingStudent.admission_number
     }
 
-    return {
-      ...data,
-      parentPhone: data.parent_phone,
-      parentEmail: data.parent_email || undefined,
-      schoolId: data.school_id,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    } as Student
+    // Always save to IndexedDB first
+    await db.put('students', updatedStudent)
+
+    // If online, try to sync immediately
+    if (navigator.onLine) {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .update(toOnlineStudent(updatedStudent))
+          .eq('id', id)
+          .select()
+          .single()
+
+        if (error) throw error
+
+        // Update local record with server data
+        const syncedStudent = toOfflineStudent(data)
+        await db.put('students', syncedStudent)
+        return syncedStudent
+      } catch (error) {
+        console.error('Failed to sync student update:', error)
+        // Keep the offline version
+      }
+    }
+
+    // If offline or sync failed, queue for sync
+    await addToSyncQueue('students', id, 'update', toOnlineStudent(updatedStudent))
+    return updatedStudent
   },
 
-  async delete(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('students')
-      .delete()
-      .eq('id', id)
+  async deleteStudent(id: string): Promise<void> {
+    const db = await getDB()
+    const student = await db.get('students', id)
+    if (!student) throw new Error('Student not found')
 
-    if (error) throw error
-  },
+    // Always delete from IndexedDB first
+    await db.delete('students', id)
+
+    // If online, try to sync immediately
+    if (navigator.onLine) {
+      try {
+        const { error } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', id)
+
+        if (error) throw error
+        return
+      } catch (error) {
+        console.error('Failed to sync student deletion:', error)
+        // Keep the deletion in IndexedDB
+      }
+    }
+
+    // If offline or sync failed, queue for sync
+    await addToSyncQueue('students', id, 'delete', toOnlineStudent(student))
+  }
 } 

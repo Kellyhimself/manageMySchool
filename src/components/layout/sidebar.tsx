@@ -21,7 +21,7 @@ const navigation = [
   { name: 'Students', href: '/students', icon: Users },
   { name: 'Finance', href: '/fees', icon: Receipt },
   { name: 'Exams', href: '/exams', icon: BookOpen },
-  { name: 'Communications', href: '/notifications', icon: Bell },
+  { name: 'Communications', href: '/communications', icon: Bell },
   { 
     name: 'Settings', 
     href: '/settings', 

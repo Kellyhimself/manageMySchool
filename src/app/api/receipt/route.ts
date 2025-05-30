@@ -1,3 +1,6 @@
+// This endpoint is now obsolete after refactor to unified receipt/notification logic.
+// You may safely remove this file or leave a comment for future cleanup.
+
 import { NextResponse } from 'next/server'
 import type { Fee } from '@/types/fee'
 import { ReceiptService } from '@/services/receipt.service'

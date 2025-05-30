@@ -4,13 +4,17 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuth } from '@/hooks/use-auth'
-import { useCreateStudent, useUpdateStudent } from '@/hooks/use-students'
+import { useCreateStudent, useUpdateStudent, createStudentOffline } from '@/hooks/use-students'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import type { Student } from '@/types/student'
+import { useQueryClient } from '@tanstack/react-query'
+import { getDB } from '@/lib/indexeddb/client'
+import { ALL_CLASS_OPTIONS, type ClassOption } from '@/lib/constants/classes'
 
 const studentSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -29,24 +33,28 @@ interface StudentFormProps {
 }
 
 export function StudentForm({ initialData, onSuccess }: StudentFormProps) {
-  const { user, school } = useAuth()
+  const { school } = useAuth()
   const createStudent = useCreateStudent()
   const updateStudent = useUpdateStudent()
+  const queryClient = useQueryClient()
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
+    reset,
+    setValue,
+    watch
   } = useForm<StudentFormData>({
     resolver: zodResolver(studentSchema),
     defaultValues: initialData
       ? {
           name: initialData.name,
           class: initialData.class,
-          parent_phone: initialData.parentPhone,
-          parent_email: initialData.parentEmail || '',
-          admission_number: initialData.admissionNumber,
-          school_id: initialData.schoolId,
+          parent_phone: initialData.parent_phone,
+          parent_email: initialData.parent_email || '',
+          admission_number: initialData.admission_number,
+          school_id: initialData.school_id,
         }
       : {
           school_id: school?.id,
@@ -55,19 +63,40 @@ export function StudentForm({ initialData, onSuccess }: StudentFormProps) {
 
   const onSubmit = async (data: StudentFormData) => {
     try {
-      if (initialData) {
-        await updateStudent.mutateAsync({ ...data, id: initialData.id })
-        toast.success('Student updated successfully')
+      if (navigator.onLine) {
+        if (initialData) {
+          await updateStudent.mutateAsync({ ...data, id: initialData.id })
+        } else {
+          await createStudent.mutateAsync(data)
+        }
       } else {
-        await createStudent.mutateAsync(data)
-        toast.success('Student created successfully')
+        // Offline: create directly in IndexedDB
+        await createStudentOffline(data)
+        
+        // Get all students from IndexedDB to update the UI
+        const db = await getDB()
+        const allStudents = await db.getAllFromIndex('students', 'by-school', school?.id || '')
+        const sortedStudents = allStudents.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        
+        // Update the cache with all students from IndexedDB using the correct query key
+        queryClient.setQueryData<Student[]>(
+          ['students', { schoolId: school?.id, search: '', class: '' }],
+          sortedStudents
+        )
+        
+        toast.success('Student created offline. Will sync when online.')
       }
+      reset()
       onSuccess?.()
     } catch (error) {
       console.error('Failed to save student:', error)
       toast.error('Failed to save student')
     }
   }
+
+  const isLoading = isSubmitting || createStudent.isPending || updateStudent.isPending
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -98,12 +127,24 @@ export function StudentForm({ initialData, onSuccess }: StudentFormProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="class">Class</Label>
-                  <Input
-                    id="class"
-                    {...register('class')}
-                    placeholder="Enter class"
-                    className={errors.class ? 'border-red-500' : ''}
-                  />
+                  <Select
+                    value={watch('class')}
+                    onValueChange={(value) => setValue('class', value)}
+                  >
+                    <SelectTrigger
+                      id="class"
+                      className={errors.class ? 'border-red-500' : ''}
+                    >
+                      <SelectValue placeholder="Select class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ALL_CLASS_OPTIONS.map((classOption) => (
+                        <SelectItem key={classOption} value={classOption}>
+                          {classOption}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {errors.class && (
                     <p className="text-sm text-red-500">{errors.class.message}</p>
                   )}
@@ -164,15 +205,20 @@ export function StudentForm({ initialData, onSuccess }: StudentFormProps) {
               variant="outline"
               onClick={() => onSuccess?.()}
               className="w-full sm:w-auto"
+              disabled={isLoading}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isLoading}
               className="w-full sm:w-auto"
             >
-              {isSubmitting ? 'Saving...' : initialData ? 'Update Student' : 'Add Student'}
+              {isLoading
+                ? 'Saving...'
+                : initialData
+                ? 'Update Student'
+                : 'Add Student'}
             </Button>
           </div>
         </form>

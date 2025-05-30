@@ -596,3 +596,5 @@ SELECT
 FROM pg_policies
 WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
+
+I lauched the app while online then switched to offline, then I tried to visit the /fees page while in that offline mode and it did not populate the fee cards. Is that something to do with the @use-fees.ts and the @fee.service.ts  not being offline or what? Or is it the Tanstack query provider or the @providers.tsx  which is wporking perfectly when online ?

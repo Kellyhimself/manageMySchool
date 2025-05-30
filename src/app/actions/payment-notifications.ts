@@ -3,12 +3,65 @@
 import PDFDocument from 'pdfkit';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
+import { NotificationService } from '@/services/notification.service';
+import { Readable } from 'stream';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function generatePDF(fee: any, transactionId: string, amount: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50,
+        autoFirstPage: true
+      });
+
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      // Add content to PDF
+      doc
+        .fontSize(20)
+        .text('Payment Receipt', { align: 'center' })
+        .moveDown()
+        .fontSize(12)
+        .text(`Receipt Number: ${transactionId}`)
+        .text(`Date: ${new Date().toISOString().split('T')[0]}`)
+        .text(`School: ${fee.schools.name}`)
+        .text(`Student: ${fee.students.name}`)
+        .text(`Admission Number: ${fee.students.admission_number}`)
+        .text(`Amount Paid: KES ${amount}`)
+        .text(`Fee Type: ${fee.fee_type}`)
+        .text(`Term: ${fee.term || 'N/A'}`)
+        .text(`Academic Year: ${fee.academic_year}`);
+
+      // Add a line
+      doc
+        .moveTo(50, doc.y + 20)
+        .lineTo(545, doc.y + 20)
+        .stroke();
+
+      // Add footer
+      doc
+        .fontSize(10)
+        .text('This is a computer-generated receipt and does not require a signature.', 50, doc.y + 30, {
+          align: 'center'
+        });
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
 
 export async function generateReceiptAndNotify(
   feeId: string,
@@ -22,11 +75,10 @@ export async function generateReceiptAndNotify(
       .select(`
         *,
         students!inner (
-          first_name,
-          last_name,
+          name,
           admission_number,
-          email,
-          phone
+          parent_phone,
+          parent_email
         ),
         schools!inner (
           name,
@@ -46,42 +98,33 @@ export async function generateReceiptAndNotify(
     }
 
     // Generate PDF receipt
-    const doc = new PDFDocument();
-    const receiptBuffer: Buffer[] = [];
+    const receipt = await generatePDF(fee, transactionId, amount);
 
-    doc.on('data', (chunk) => receiptBuffer.push(chunk));
-    
-    doc
-      .fontSize(20)
-      .text('Payment Receipt', { align: 'center' })
-      .moveDown()
-      .fontSize(12)
-      .text(`Receipt Number: ${transactionId}`)
-      .text(`Date: ${new Date().toISOString().split('T')[0]}`)
-      .text(`School: ${fee.schools.name}`)
-      .text(`Student: ${fee.students.first_name} ${fee.students.last_name}`)
-      .text(`Admission Number: ${fee.students.admission_number}`)
-      .text(`Amount Paid: KES ${amount}`)
-      .text(`Fee Type: ${fee.fee_type}`)
-      .text(`Term: ${fee.term || 'N/A'}`)
-      .text(`Academic Year: ${fee.academic_year}`);
-
-    doc.end();
-
-    // Wait for PDF generation to complete
-    const receipt = await new Promise<Buffer>((resolve) => {
-      doc.on('end', () => {
-        resolve(Buffer.concat(receiptBuffer));
+    // Upload receipt to storage and get URL
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('receipts')
+      .upload(`${transactionId}.pdf`, receipt, {
+        contentType: 'application/pdf',
+        cacheControl: '3600'
       });
-    });
 
-    // Send email notification
-    if (fee.students.email) {
+    if (uploadError) {
+      console.error('Receipt upload error:', uploadError);
+      throw new Error(`Failed to upload receipt: ${uploadError.message}`);
+    }
+
+    // Get public URL for the receipt
+    const { data: { publicUrl: receiptUrl } } = supabase.storage
+      .from('receipts')
+      .getPublicUrl(`${transactionId}.pdf`);
+
+    // Send email notification to parent
+    if (fee.students.parent_email) {
       await resend.emails.send({
         from: 'noreply@myschool.veylor360.com',
-        to: fee.students.email,
+        to: fee.students.parent_email,
         subject: 'Payment Receipt',
-        text: `Dear ${fee.students.first_name},\n\nThank you for your payment of KES ${amount}.\n\nPlease find your receipt attached.`,
+        text: `Dear Parent/Guardian,\n\nThis is to confirm that a payment of KES ${amount} has been received for ${fee.students.name} (Admission No: ${fee.students.admission_number}).\n\nPlease find your receipt attached.\n\nBest regards,\n${fee.schools.name}`,
         attachments: [
           {
             filename: `receipt-${transactionId}.pdf`,
@@ -91,10 +134,22 @@ export async function generateReceiptAndNotify(
       });
     }
 
-    // Send SMS notification (if phone number exists)
-    if (fee.students.phone) {
-      // Implement SMS sending logic here
-      // You can use Africa's Talking or any other SMS provider
+    // Send notifications to parent's phone
+    if (fee.students.parent_phone) {
+      const notificationService = NotificationService.getInstance();
+      
+      // Send SMS
+      const smsMessage = `Dear Parent/Guardian, payment of KES ${amount} received for ${fee.students.name} (Adm: ${fee.students.admission_number}). Receipt sent to your email. ${fee.schools.name}`;
+      await notificationService.sendSMS(fee.students.parent_phone, smsMessage);
+
+      // Send WhatsApp
+      await notificationService.sendWhatsApp(fee.students.parent_phone, {
+        studentName: fee.students.name,
+        admissionNumber: fee.students.admission_number,
+        amount: amount,
+        schoolName: fee.schools.name,
+        receiptUrl: receiptUrl
+      });
     }
 
     return { success: true };
