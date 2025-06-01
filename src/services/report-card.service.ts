@@ -81,11 +81,11 @@ class ReportCardService {
         .single()
 
       if (reportCardError) throw reportCardError
-      if (reportCard) reportCards.push(reportCard)
+      if (reportCard) reportCards.push(reportCard as ReportCard)
     }
 
     return reportCards
-  },
+  }
 
   async sendReportCards(
     reportCardIds: string[],
@@ -106,7 +106,7 @@ class ReportCardService {
     if (reportCardsError) throw reportCardsError
     if (!reportCards) return
 
-    for (const reportCard of reportCards as unknown as ReportCardWithStudent[]) {
+    for (const reportCard of reportCards as ReportCardWithStudent[]) {
       const student = reportCard.students
       if (!student) continue
 
@@ -129,7 +129,7 @@ class ReportCardService {
         console.error('Failed to send notification:', error)
       }
     }
-  },
+  }
 
   private async calculateClassPosition(
     schoolId: string,
@@ -172,7 +172,7 @@ class ReportCardService {
 
     // If no position found (shouldn't happen), return 1
     return 1
-  },
+  }
 
   private calculateGrade(averageMarks: number): string {
     if (averageMarks >= 80) return 'A'
@@ -180,7 +180,7 @@ class ReportCardService {
     if (averageMarks >= 60) return 'C'
     if (averageMarks >= 50) return 'D'
     return 'E'
-  },
+  }
 
   private generateReportCardMessage(reportCard: ReportCard, student: Student): string {
     const message = `
@@ -211,7 +211,7 @@ School Administration
     })
 
     return message
-  },
+  }
 
   private generateSMSMessage(reportCard: ReportCard, student: Student): string {
     return `Report Card for ${student.name}: Term ${reportCard.term}, Avg: ${reportCard.average_marks}, Grade: ${reportCard.grade}, Position: ${reportCard.class_position}. Full report sent to your email.`
@@ -248,7 +248,7 @@ export async function generateAndSendReportCards(
     console.error('Failed to generate and send report cards:', error)
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'An error occurred' 
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
     }
   }
 } 
