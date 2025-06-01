@@ -145,7 +145,7 @@ export default function ResultsEntryPage({
       const resultsArray = Object.values(results)
       const { error } = await supabase.from("exams").upsert(
         resultsArray.map((result) => ({
-          id: crypto.randomUUID(),
+          id: exam.id,
           student_id: result.student_id,
           score: result.score,
           remarks: result.remarks || null,

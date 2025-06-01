@@ -20,18 +20,28 @@ const toOfflineStudent = (student: SupabaseStudent): Student => {
 }
 
 export const studentService = {
-  async getStudents(schoolId: string): Promise<Student[]> {
+  async getStudents(schoolId: string, filters?: { class?: string }): Promise<Student[]> {
     if (!navigator.onLine) {
       const db = await getDB()
       const students = await db.getAllFromIndex('students', 'by-school', schoolId)
+      // Apply class filter to offline data
+      if (filters?.class) {
+        return students.filter(student => student.class === filters.class)
+      }
       return students
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('students')
       .select('*')
       .eq('school_id', schoolId)
-      .order('created_at', { ascending: false })
+
+    // Apply class filter if provided
+    if (filters?.class) {
+      query = query.eq('class', filters.class)
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false })
 
     if (error) throw error
     return data.map(toOfflineStudent)

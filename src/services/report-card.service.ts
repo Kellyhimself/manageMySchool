@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client'
-import { notificationService } from './notification.service'
+import { NotificationService } from './notification.service'
 import type { Database } from '@/types/supabase'
 import { getDB } from '@/lib/indexeddb/client'
 import { addToSyncQueue } from '@/lib/sync/sync-service'
@@ -117,6 +117,8 @@ export const reportCardService = {
       .in('id', reportCardIds)
 
     if (reportCardsError) throw reportCardsError
+
+    const notificationService = NotificationService.getInstance()
 
     await Promise.all(
       reportCards.map(async (reportCard) => {

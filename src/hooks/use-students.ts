@@ -27,7 +27,7 @@ export function useStudents(filters?: StudentFilters) {
         }
         
         // If online, fetch fresh data and update IndexedDB
-        const freshStudents = await studentService.getStudents(school.id)
+        const freshStudents = await studentService.getStudents(school.id, { class: filters?.class })
         
         // Update IndexedDB with fresh data
         for (const student of freshStudents) {

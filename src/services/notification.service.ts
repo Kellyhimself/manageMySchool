@@ -1,5 +1,4 @@
 import { Resend } from 'resend';
-import twilio from 'twilio';
 
 interface WhatsAppTemplateData {
   studentName: string;
@@ -11,23 +10,11 @@ interface WhatsAppTemplateData {
 
 export class NotificationService {
   private static instance: NotificationService;
-  private twilioClient: twilio.Twilio;
   private resend: Resend;
   private readonly MAX_RETRIES = 3;
   private readonly SMS_LENGTH_LIMIT = 160;
-  private readonly WHATSAPP_TEMPLATE = 'payment_receipt';
-  private readonly WHATSAPP_ENABLED = process.env.TWILIO_WHATSAPP_ENABLED === 'true';
 
   private constructor() {
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      throw new Error('Twilio configuration is missing');
-    }
-
-    this.twilioClient = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    );
-
     this.resend = new Resend(process.env.RESEND_API_KEY);
   }
 
@@ -36,6 +23,33 @@ export class NotificationService {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  private isValidPhoneNumber(phoneNumber: string): boolean {
+    // Remove any spaces or special characters
+    const cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    
+    // Check if it's a valid Kenyan number
+    // Format: 07XXXXXXXX or +254XXXXXXXXX
+    return /^(?:\+254|0)[17]\d{8}$/.test(cleaned);
+  }
+
+  private formatPhoneNumber(phoneNumber: string): string {
+    // Remove any spaces or special characters
+    const cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    
+    // If it starts with 0, replace with +254
+    if (cleaned.startsWith('0')) {
+      return `+254${cleaned.slice(1)}`;
+    }
+    
+    // If it starts with +254, return as is
+    if (cleaned.startsWith('+254')) {
+      return cleaned;
+    }
+    
+    // If it doesn't have country code, add +254
+    return `+254${cleaned}`;
   }
 
   public async sendSMS(phoneNumber: string, message: string): Promise<boolean> {
@@ -54,17 +68,28 @@ export class NotificationService {
         const formattedPhone = this.formatPhoneNumber(phoneNumber);
         console.log(`Original phone: ${phoneNumber}, Formatted phone: ${formattedPhone}`);
         
-        const response = await this.twilioClient.messages.create({
-          body: message,
-          to: formattedPhone,
-          messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        const response = await fetch(`${baseUrl}/api/notifications/sms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            phoneNumber: formattedPhone,
+            message
+          })
         });
 
-        if (response.status === 'queued' || response.status === 'sent' || response.status === 'accepted') {
-          console.info(`SMS sent successfully to ${formattedPhone.slice(-4)} via Twilio`);
+        if (!response.ok) {
+          throw new Error(`SMS API returned ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          console.info(`SMS sent successfully to ${formattedPhone.slice(-4)}`);
           return true;
         } else {
-          throw new Error(`SMS send failed with status: ${response.status}`);
+          throw new Error(result.error || 'Failed to send SMS');
         }
       } catch (error) {
         lastError = error as Error;
@@ -79,81 +104,31 @@ export class NotificationService {
     throw new Error(`Failed to send SMS after ${this.MAX_RETRIES} attempts: ${lastError?.message}`);
   }
 
+  public async sendEmail(to: string, subject: string, text: string): Promise<boolean> {
+    try {
+      const response = await this.resend.emails.send({
+        from: 'noreply@myschool.veylor360.com',
+        to,
+        subject,
+        text
+      });
+
+      if (!response || response.error) {
+        throw new Error(response?.error?.message || 'Failed to send email');
+      }
+
+      console.log(`Email sent successfully to ${to}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to send email:', error);
+      throw error;
+    }
+  }
+
   public async sendWhatsApp(phoneNumber: string, templateData: WhatsAppTemplateData): Promise<boolean> {
-    if (!this.WHATSAPP_ENABLED) {
-      console.info('WhatsApp is not enabled, falling back to SMS');
-      const smsMessage = `Dear Parent/Guardian,\n\nPayment confirmation for ${templateData.studentName} (Admission No: ${templateData.admissionNumber})\nAmount: KES ${templateData.amount}\nSchool: ${templateData.schoolName}\n\nReceipt: ${templateData.receiptUrl || 'Not available'}`;
-      return this.sendSMS(phoneNumber, smsMessage);
-    }
-
-    if (!this.isValidPhoneNumber(phoneNumber)) {
-      throw new Error(`Invalid phone number format: ${phoneNumber}`);
-    }
+    const message = `Dear Parent/Guardian,\n\nPayment confirmation for ${templateData.studentName} (Admission No: ${templateData.admissionNumber})\nAmount: KES ${templateData.amount}\nSchool: ${templateData.schoolName}\n\nReceipt: ${templateData.receiptUrl || 'Not available'}`;
     
-    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
-      try {
-        const formattedPhone = this.formatPhoneNumber(phoneNumber);
-        
-        const response = await this.twilioClient.messages.create({
-          body: `Dear Parent/Guardian,\n\nPayment confirmation for ${templateData.studentName} (Admission No: ${templateData.admissionNumber})\nAmount: KES ${templateData.amount}\nSchool: ${templateData.schoolName}\n\nReceipt: ${templateData.receiptUrl || 'Not available'}`,
-          to: formattedPhone,
-          from: process.env.TWILIO_PHONE_NUMBER
-        });
-
-        if (response.status === 'queued' || response.status === 'sent') {
-          console.info(`WhatsApp message sent successfully to ${formattedPhone.slice(-4)} via Twilio`);
-          return true;
-        } else {
-          throw new Error(`WhatsApp send failed with status: ${response.status}`);
-        }
-      } catch (error) {
-        console.warn(`WhatsApp send attempt ${attempt} failed:`, error);
-        
-        if (attempt < this.MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-        }
-      }
-    }
-
-    // If WhatsApp fails, fall back to SMS
-    console.info('WhatsApp failed, falling back to SMS');
-    return this.sendSMS(phoneNumber, `Dear Parent/Guardian,\n\nPayment confirmation for ${templateData.studentName} (Admission No: ${templateData.admissionNumber})\nAmount: KES ${templateData.amount}\nSchool: ${templateData.schoolName}\n\nReceipt: ${templateData.receiptUrl || 'Not available'}`);
-  }
-
-  private isValidPhoneNumber(phone: string): boolean {
-    const digits = phone.replace(/\D/g, '');
-    return digits.length >= 9 && digits.length <= 12;
-  }
-
-  private formatPhoneNumber(phone: string): string {
-    // Remove all non-digit characters
-    let digits = phone.replace(/\D/g, '');
-    
-    // Handle Kenyan numbers
-    if (digits.startsWith('0')) {
-      // Convert 07XX to +2547XX
-      return '+254' + digits.slice(1);
-    }
-    
-    if (digits.startsWith('254')) {
-      // Add + prefix
-      return '+' + digits;
-    }
-    
-    if (phone.startsWith('+')) {
-      // Ensure it starts with +254
-      digits = phone.slice(1);
-      if (!digits.startsWith('254')) {
-        return '+254' + digits;
-      }
-      return '+' + digits;
-    }
-    
-    // If number is less than 12 digits, assume it's a Kenyan number and add +254
-    if (digits.length < 12) {
-      return '+254' + digits;
-    }
-    
-    return '+' + digits;
+    // For now, fall back to SMS since WhatsApp requires server-side implementation
+    return this.sendSMS(phoneNumber, message);
   }
 } 

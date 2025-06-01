@@ -39,7 +39,7 @@ export async function sendBulkMessage({
       .from('students')
       .select('id, name, parent_phone, parent_email')
       .in('id', recipientIds)
-      .eq('school_id', schoolId) // Use passed school ID
+      .eq('school_id', schoolId)
 
     if (fetchError) throw fetchError
 
@@ -53,7 +53,7 @@ export async function sendBulkMessage({
         message,
         type,
         status: 'pending',
-        school_id: schoolId // Use passed school ID
+        school_id: schoolId
       })
       .select()
       .single()
@@ -70,14 +70,25 @@ export async function sendBulkMessage({
           await notificationService.sendSMS(recipient.parent_phone, message)
           stats.success++
         } else if (type === 'email' && recipient.parent_email) {
-          await resend.emails.send({
-            from: 'noreply@myschool.veylor360.com',
+          if (!process.env.RESEND_API_KEY) {
+            throw new Error('Resend API key is not configured')
+          }
+
+          const emailResponse = await resend.emails.send({
+            from: 'onboarding@resend.dev',
             to: recipient.parent_email,
             subject: 'School Communication',
             text: message
           })
+
+          if (!emailResponse || emailResponse.error) {
+            throw new Error(emailResponse?.error?.message || 'Failed to send email')
+          }
+
+          console.log(`Email sent successfully to ${recipient.parent_email}:`, emailResponse)
           stats.success++
         } else {
+          console.warn(`No valid contact method for ${recipient.name}`)
           stats.failed++
         }
       } catch (error) {
