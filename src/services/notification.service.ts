@@ -10,12 +10,12 @@ interface WhatsAppTemplateData {
 
 export class NotificationService {
   private static instance: NotificationService;
-  private resend: Resend;
+  private resend: Resend | null = null;
   private readonly MAX_RETRIES = 3;
   private readonly SMS_LENGTH_LIMIT = 160;
 
   private constructor() {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
+    // Don't initialize services in constructor
   }
 
   public static getInstance(): NotificationService {
@@ -23,6 +23,16 @@ export class NotificationService {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  private getResendClient(): Resend {
+    if (!this.resend) {
+      if (!process.env.RESEND_API_KEY) {
+        throw new Error('Resend API key is not configured');
+      }
+      this.resend = new Resend(process.env.RESEND_API_KEY);
+    }
+    return this.resend;
   }
 
   private isValidPhoneNumber(phoneNumber: string): boolean {
@@ -106,8 +116,9 @@ export class NotificationService {
 
   public async sendEmail(to: string, subject: string, text: string): Promise<boolean> {
     try {
-      const response = await this.resend.emails.send({
-        from: 'noreply@myschool.veylor360.com',
+      const resend = this.getResendClient();
+      const response = await resend.emails.send({
+        from: 'onboarding@resend.dev',
         to,
         subject,
         text

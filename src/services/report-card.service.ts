@@ -16,7 +16,15 @@ export const reportCardService = {
     term: string,
     academicYear: string
   ): Promise<ReportCard[]> {
+    console.log('Starting report card generation:', {
+      schoolId,
+      studentCount: studentIds.length,
+      term,
+      academicYear
+    });
+
     if (!navigator.onLine) {
+      console.log('Offline mode detected, fetching from IndexedDB');
       const db = await getDB()
       const reportCards = await db.getAllFromIndex('report_cards', 'by-school', schoolId)
       return reportCards.filter(rc => 
@@ -26,18 +34,8 @@ export const reportCardService = {
       )
     }
 
-    // Get all exams for the selected students in the given term and year
-    const { data: exams, error: examsError } = await supabase
-      .from('exams')
-      .select('*')
-      .in('student_id', studentIds)
-      .eq('term', term)
-      .eq('academic_year', academicYear)
-      .eq('school_id', schoolId)
-
-    if (examsError) throw examsError
-
-    // Get all students
+    // Get all students first to get their class/grade
+    console.log('Fetching student information...');
     const { data: students, error: studentsError } = await supabase
       .from('students')
       .select('*')
@@ -45,24 +43,121 @@ export const reportCardService = {
       .eq('school_id', schoolId)
 
     if (studentsError) throw studentsError
+    console.log(`Found ${students.length} students`);
+
+    // Get the class/grade from the first student (assuming all students are from the same class)
+    const studentClass = students[0]?.class
+    if (!studentClass) {
+      console.error('No class found for students');
+      return [];
+    }
+
+    // Get all exams for the selected students in the given term and year
+    console.log('Fetching exams from database...', {
+      studentIds,
+      term,
+      academicYear,
+      schoolId,
+      studentClass
+    });
+
+    const { data: exams, error: examsError } = await supabase
+      .from('exams')
+      .select('*')
+      .in('student_id', studentIds)
+      .eq('term', term)
+      .eq('academic_year', academicYear)
+      .eq('school_id', schoolId)
+      .eq('grade', studentClass)
+
+    if (examsError) throw examsError
+    console.log(`Found ${exams.length} exams for the selected students`, {
+      examDetails: exams.map(e => ({
+        studentId: e.student_id,
+        subject: e.subject,
+        totalMarks: e.total_marks
+      }))
+    });
 
     // Generate report cards
+    console.log('Generating report cards...');
+    
+    // First calculate all averages to determine positions
+    const studentAverages = await Promise.all(
+      students.map(async (student) => {
+        const studentExams = exams.filter(exam => exam.student_id === student.id)
+        if (studentExams.length === 0) return null;
+        
+        const totalMarks = studentExams.reduce((sum, exam) => sum + exam.total_marks, 0)
+        const totalScore = studentExams.reduce((sum, exam) => sum + (exam.score || 0), 0)
+        const averageMarks = (totalScore / totalMarks) * 100
+        
+        return {
+          studentId: student.id,
+          studentName: student.name,
+          averageMarks,
+          className: student.class
+        }
+      })
+    )
+
+    // Filter out null values and sort by average marks
+    const validAverages = studentAverages.filter((avg): avg is NonNullable<typeof avg> => avg !== null)
+      .sort((a, b) => b.averageMarks - a.averageMarks)
+
+    // Calculate positions (handling ties)
+    const positions = new Map<string, number>()
+    let currentPosition = 1
+    let currentAverage = -1
+    let samePositionCount = 0
+
+    validAverages.forEach((avg, index) => {
+      if (avg.averageMarks !== currentAverage) {
+        currentPosition = index + 1
+        currentAverage = avg.averageMarks
+        samePositionCount = 0
+      } else {
+        samePositionCount++
+      }
+      positions.set(avg.studentId, currentPosition)
+    })
+
+    // Now generate report cards with the calculated positions
     const reportCards: ReportCard[] = await Promise.all(
       students.map(async (student) => {
         const studentExams = exams.filter(exam => exam.student_id === student.id)
         
+        // Skip students with no exams
+        if (studentExams.length === 0) {
+          console.warn(`No exams found for student ${student.name} (${student.id})`)
+          return null
+        }
+        
+        console.log(`Processing report card for ${student.name}:`, {
+          examCount: studentExams.length,
+          subjects: studentExams.map(e => e.subject)
+        });
+        
         // Calculate total marks and average
         const totalMarks = studentExams.reduce((sum, exam) => sum + exam.total_marks, 0)
-        const averageMarks = totalMarks / studentExams.length
+        const totalScore = studentExams.reduce((sum, exam) => sum + (exam.score || 0), 0)
+        const averageMarks = (totalScore / totalMarks) * 100  // Convert to percentage
 
-        // Calculate class position
-        const classPosition = await this.calculateClassPosition(
-          schoolId,
-          student.class,
-          term,
-          academicYear,
-          averageMarks
-        )
+        console.log(`Detailed marks calculation for ${student.name}:`, {
+          exams: studentExams.map(exam => ({
+            subject: exam.subject,
+            totalMarks: exam.total_marks,
+            score: exam.score || 0,
+            percentage: ((exam.score || 0) / exam.total_marks) * 100
+          })),
+          totalMarks,
+          totalScore,
+          averageMarks,
+          calculation: `(${totalScore} / ${totalMarks}) * 100 = ${averageMarks}%`
+        });
+
+        // Get the calculated position
+        const classPosition = positions.get(student.id) || 1
 
         // Determine grade based on average marks
         const grade = this.calculateGrade(averageMarks)
@@ -85,6 +180,13 @@ export const reportCardService = {
           school_id: schoolId
         }
 
+        console.log(`Generated report card for ${student.name}:`, {
+          totalMarks,
+          averageMarks,
+          grade,
+          classPosition
+        });
+
         // Save to database
         const { data, error } = await supabase
           .from('report_cards')
@@ -97,13 +199,21 @@ export const reportCardService = {
       })
     )
 
-    return reportCards
+    // Filter out null values (students with no exams)
+    const validReportCards = reportCards.filter((rc): rc is ReportCard => rc !== null)
+    console.log(`Successfully generated ${validReportCards.length} report cards`);
+    return validReportCards
   },
 
   async sendReportCards(
     reportCardIds: string[],
     notificationType: 'sms' | 'email' | 'both'
   ): Promise<void> {
+    console.log('Starting to send report cards:', {
+      reportCardCount: reportCardIds.length,
+      notificationType
+    });
+
     const { data: reportCards, error: reportCardsError } = await supabase
       .from('report_cards')
       .select(`
@@ -117,29 +227,47 @@ export const reportCardService = {
       .in('id', reportCardIds)
 
     if (reportCardsError) throw reportCardsError
+    console.log(`Retrieved ${reportCards.length} report cards for sending`);
 
     const notificationService = NotificationService.getInstance()
 
     await Promise.all(
       reportCards.map(async (reportCard) => {
         const student = reportCard.students
-        if (!student) return
+        if (!student) {
+          console.warn(`No student information found for report card ${reportCard.id}`);
+          return;
+        }
 
-        const message = this.generateReportCardMessage(reportCard, student)
+        const fullMessage = this.generateReportCardMessage(reportCard, student)
+        const smsMessage = this.generateSMSMessage(reportCard, student)
+        
+        console.log(`Generated message for ${student.name}:`, {
+          hasPhone: !!student.parent_phone,
+          hasEmail: !!student.parent_email,
+          notificationType
+        });
 
         if (notificationType === 'sms' || notificationType === 'both') {
           if (student.parent_phone) {
-            await notificationService.sendSMS(student.parent_phone, message)
+            console.log(`Sending SMS to ${student.name}'s parent at ${student.parent_phone}`);
+            await notificationService.sendSMS(student.parent_phone, smsMessage)
+          } else {
+            console.warn(`No phone number available for ${student.name}'s parent`);
           }
         }
 
         if (notificationType === 'email' || notificationType === 'both') {
           if (student.parent_email) {
-            await notificationService.sendEmail(student.parent_email, 'Report Card', message)
+            console.log(`Sending email to ${student.name}'s parent at ${student.parent_email}`);
+            await notificationService.sendEmail(student.parent_email, 'Report Card', fullMessage)
+          } else {
+            console.warn(`No email available for ${student.name}'s parent`);
           }
         }
       })
     )
+    console.log('Finished sending all report cards');
   },
 
   private async calculateClassPosition(
@@ -149,17 +277,37 @@ export const reportCardService = {
     academicYear: string,
     studentAverage: number
   ): Promise<number> {
-    const { data: classAverages, error } = await supabase
+    // Get all report cards for the same class, term, and year
+    const { data: classReportCards, error } = await supabase
       .from('report_cards')
       .select('average_marks')
       .eq('school_id', schoolId)
       .eq('term', term)
       .eq('academic_year', academicYear)
+      .eq('grade', className)  // Add grade filter
       .order('average_marks', { ascending: false })
 
     if (error) throw error
 
-    return classAverages.findIndex(avg => avg.average_marks === studentAverage) + 1
+    // Group students by their average marks to handle ties
+    const averagesByPosition = new Map<number, number[]>()
+    classReportCards.forEach((rc, index) => {
+      const position = index + 1
+      if (!averagesByPosition.has(position)) {
+        averagesByPosition.set(position, [])
+      }
+      averagesByPosition.get(position)?.push(rc.average_marks)
+    })
+
+    // Find the position where the student's average matches
+    for (const [position, averages] of averagesByPosition) {
+      if (averages.includes(studentAverage)) {
+        return position
+      }
+    }
+
+    // If no position found (shouldn't happen), return 1
+    return 1
   },
 
   private calculateGrade(averageMarks: number): string {
@@ -171,7 +319,7 @@ export const reportCardService = {
   },
 
   private generateReportCardMessage(reportCard: ReportCard, student: Student): string {
-    return `
+    const message = `
 Dear Parent/Guardian,
 
 REPORT CARD FOR ${student.name}
@@ -190,7 +338,19 @@ Please sign and return this report card to acknowledge receipt.
 
 Thank you,
 School Administration
-    `.trim()
+    `.trim();
+
+    console.log('Generated report card message:', {
+      studentName: student.name,
+      messageLength: message.length,
+      preview: message.substring(0, 100) + '...'
+    });
+
+    return message;
+  },
+
+  private generateSMSMessage(reportCard: ReportCard, student: Student): string {
+    return `Report Card for ${student.name}: Term ${reportCard.term}, Avg: ${reportCard.average_marks}, Grade: ${reportCard.grade}, Position: ${reportCard.class_position}. Full report sent to your email.`;
   }
 }
 

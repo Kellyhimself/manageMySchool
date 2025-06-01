@@ -27,9 +27,9 @@ export function Header({ user, school }: HeaderProps) {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
         {/* School Name - Always visible */}
-        <div className="flex items-center">
-          <a className="flex items-center space-x-2" href="/">
-            <span className="font-bold truncate max-w-[150px] sm:max-w-none">
+        <div className="flex items-center pl-4">
+          <a className="flex items-center space-x-2 group" href="/">
+            <span className="font-bold truncate max-w-[150px] sm:max-w-none transition-all duration-300 ease-in-out group-hover:scale-105 group-hover:text-primary">
               {school.name}
             </span>
           </a>
@@ -38,7 +38,7 @@ export function Header({ user, school }: HeaderProps) {
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center justify-end space-x-4">
           <div className="flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground hidden lg:inline-block">
+            <span className="text-sm text-muted-foreground hidden lg:inline-block transition-colors duration-300 hover:text-primary">
               {user.email}
             </span>
             <DropdownMenu>

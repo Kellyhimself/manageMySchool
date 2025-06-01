@@ -20,7 +20,7 @@ export default function ReportCardsPage() {
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
-  const [selectedTerm, setSelectedTerm] = useState<string>('1');
+  const [selectedTerm, setSelectedTerm] = useState<string>('Term 1');
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
   const [notificationType, setNotificationType] = useState<'sms' | 'email' | 'both'>('both');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -125,9 +125,9 @@ export default function ReportCardsPage() {
                       <SelectValue placeholder="Select term" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Term 1</SelectItem>
-                      <SelectItem value="2">Term 2</SelectItem>
-                      <SelectItem value="3">Term 3</SelectItem>
+                      <SelectItem value="Term 1">Term 1</SelectItem>
+                      <SelectItem value="Term 2">Term 2</SelectItem>
+                      <SelectItem value="Term 3">Term 3</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
