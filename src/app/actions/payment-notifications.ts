@@ -1,18 +1,28 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
 import { NotificationService } from '@/services/notification.service';
-import { feeService } from '@/services/fee.service';
-import { studentService } from '@/services/student.service';
+import type { Database } from '@/types/supabase';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+type FeeWithRelations = Database['public']['Tables']['fees']['Row'] & {
+  students: {
+    name: string;
+    admission_number: string | null;
+    parent_phone: string;
+    parent_email: string | null;
+  };
+  schools: {
+    name: string;
+    address: string | null;
+  };
+};
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-function generateReceipt(fee: any, transactionId: string, amount: number): string {
+function generateReceipt(fee: FeeWithRelations, transactionId: string, amount: number): string {
   return `
     <!DOCTYPE html>
     <html>
