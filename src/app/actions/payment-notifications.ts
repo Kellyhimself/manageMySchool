@@ -1,10 +1,10 @@
 'use server';
 
-import PDFDocument from 'pdfkit';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
 import { NotificationService } from '@/services/notification.service';
-import { Readable } from 'stream';
+import { feeService } from '@/services/fee.service';
+import { studentService } from '@/services/student.service';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const supabase = createClient(
@@ -12,55 +12,158 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-async function generatePDF(fee: any, transactionId: string, amount: number): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
-        autoFirstPage: true
-      });
+function generateReceipt(fee: any, transactionId: string, amount: number): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 40px;
+            color: #333;
+            background-color: #f9f9f9;
+          }
+          .receipt-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+          }
+          .header h1 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 28px;
+          }
+          .school-name {
+            color: #7f8c8d;
+            font-size: 18px;
+            margin-top: 10px;
+          }
+          .receipt-details {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+          }
+          .receipt-details p {
+            margin: 10px 0;
+          }
+          .amount {
+            font-size: 20px;
+            color: #27ae60;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            text-align: center;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            color: #7f8c8d;
+            font-size: 12px;
+          }
+          .receipt-number {
+            color: #7f8c8d;
+            font-size: 12px;
+            text-align: right;
+            margin-bottom: 20px;
+          }
+          .print-button {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin: 20px 0;
+            cursor: pointer;
+            border: none;
+            font-size: 16px;
+          }
+          .print-button:hover {
+            background-color: #2980b9;
+          }
+          @media print {
+            body {
+              background: white;
+              padding: 0;
+              margin: 0;
+            }
+            .receipt-container {
+              box-shadow: none;
+              padding: 20px;
+              max-width: 100%;
+            }
+            .print-button {
+              display: none;
+            }
+            .receipt-details {
+              background: none;
+              border: 1px solid #ddd;
+            }
+            .amount {
+              background: none;
+              border: 1px solid #27ae60;
+            }
+            .header {
+              border-bottom: 1px solid #000;
+            }
+            .footer {
+              border-top: 1px solid #000;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-container">
+          <div class="header">
+            <h1>Payment Receipt</h1>
+            <div class="school-name">${fee.schools.name}</div>
+          </div>
+          
+          <div class="receipt-number">
+            Receipt No: ${transactionId}
+          </div>
 
-      const chunks: Buffer[] = [];
+          <div class="receipt-details">
+            <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
+            <p><strong>Student Name:</strong> ${fee.students.name}</p>
+            <p><strong>Admission Number:</strong> ${fee.students.admission_number}</p>
+            <p><strong>Fee Type:</strong> ${fee.fee_type || 'School Fees'}</p>
+            <p><strong>Description:</strong> ${fee.description || 'N/A'}</p>
+          </div>
 
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
+          <div class="amount">
+            Amount Paid: KES ${amount.toLocaleString()}
+          </div>
 
-      // Add content to PDF
-      doc
-        .fontSize(20)
-        .text('Payment Receipt', { align: 'center' })
-        .moveDown()
-        .fontSize(12)
-        .text(`Receipt Number: ${transactionId}`)
-        .text(`Date: ${new Date().toISOString().split('T')[0]}`)
-        .text(`School: ${fee.schools.name}`)
-        .text(`Student: ${fee.students.name}`)
-        .text(`Admission Number: ${fee.students.admission_number}`)
-        .text(`Amount Paid: KES ${amount}`)
-        .text(`Fee Type: ${fee.fee_type}`)
-        .text(`Term: ${fee.term || 'N/A'}`)
-        .text(`Academic Year: ${fee.academic_year}`);
+          <div style="text-align: center;">
+            <button class="print-button" onclick="window.print()">Print Receipt</button>
+          </div>
 
-      // Add a line
-      doc
-        .moveTo(50, doc.y + 20)
-        .lineTo(545, doc.y + 20)
-        .stroke();
-
-      // Add footer
-      doc
-        .fontSize(10)
-        .text('This is a computer-generated receipt and does not require a signature.', 50, doc.y + 30, {
-          align: 'center'
-        });
-
-      doc.end();
-    } catch (error) {
-      reject(error);
-    }
-  });
+          <div class="footer">
+            <p>This is a computer-generated receipt and does not require a signature.</p>
+            <p>Thank you for your payment!</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 export async function generateReceiptAndNotify(
@@ -69,18 +172,20 @@ export async function generateReceiptAndNotify(
   amount: number
 ) {
   try {
-    // Get fee and student details with correct join
+    console.log('Starting receipt generation and notification process...');
+    
+    // Get fee details with relationships using Supabase
     const { data: fee, error: feeError } = await supabase
       .from('fees')
       .select(`
         *,
-        students!inner (
+        students (
           name,
           admission_number,
           parent_phone,
           parent_email
         ),
-        schools!inner (
+        schools (
           name,
           address
         )
@@ -89,7 +194,6 @@ export async function generateReceiptAndNotify(
       .single();
 
     if (feeError) {
-      console.error('Fee query error:', feeError);
       throw new Error(`Failed to fetch fee details: ${feeError.message}`);
     }
 
@@ -97,62 +201,71 @@ export async function generateReceiptAndNotify(
       throw new Error(`Fee not found with ID: ${feeId}`);
     }
 
-    // Generate PDF receipt
-    const receipt = await generatePDF(fee, transactionId, amount);
+    // Generate receipt HTML
+    const receiptHtml = generateReceipt(fee, transactionId, amount);
 
-    // Upload receipt to storage and get URL
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('receipts')
-      .upload(`${transactionId}.pdf`, receipt, {
-        contentType: 'application/pdf',
-        cacheControl: '3600'
-      });
+    // Store receipt URL in the fee record
+    const { error: updateError } = await supabase
+      .from('fees')
+      .update({
+        receipt_url: `/receipts/${feeId}.html`,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', feeId);
 
-    if (uploadError) {
-      console.error('Receipt upload error:', uploadError);
-      throw new Error(`Failed to upload receipt: ${uploadError.message}`);
+    if (updateError) {
+      throw new Error(`Failed to update fee with receipt URL: ${updateError.message}`);
     }
 
-    // Get public URL for the receipt
-    const { data: { publicUrl: receiptUrl } } = supabase.storage
-      .from('receipts')
-      .getPublicUrl(`${transactionId}.pdf`);
+    // Send notifications
+    const notificationService = NotificationService.getInstance();
+    const receiptUrl = `/receipts/${feeId}.html`;
 
-    // Send email notification to parent
+    // Send email notification if parent email exists
     if (fee.students.parent_email) {
-      await resend.emails.send({
-        from: 'noreply@myschool.veylor360.com',
-        to: fee.students.parent_email,
-        subject: 'Payment Receipt',
-        text: `Dear Parent/Guardian,\n\nThis is to confirm that a payment of KES ${amount} has been received for ${fee.students.name} (Admission No: ${fee.students.admission_number}).\n\nPlease find your receipt attached.\n\nBest regards,\n${fee.schools.name}`,
-        attachments: [
-          {
-            filename: `receipt-${transactionId}.pdf`,
-            content: receipt
-          }
-        ]
-      });
+      try {
+        await notificationService.sendEmail(
+          fee.students.parent_email,
+          'Payment Receipt',
+          `Dear Parent/Guardian,\n\nThis is to confirm that a payment of KES ${amount.toLocaleString()} has been received for ${fee.students.name} (Admission No: ${fee.students.admission_number}).\n\nPlease find your receipt at: ${receiptUrl}\n\nBest regards,\n${fee.schools.name}`
+        );
+      } catch (error) {
+        console.error('Failed to send email notification:', error);
+        // Continue with other notifications
+      }
     }
 
-    // Send notifications to parent's phone
+    // Send SMS notification if parent phone exists
     if (fee.students.parent_phone) {
-      const notificationService = NotificationService.getInstance();
-      
-      // Send SMS
-      const smsMessage = `Dear Parent/Guardian, payment of KES ${amount} received for ${fee.students.name} (Adm: ${fee.students.admission_number}). Receipt sent to your email. ${fee.schools.name}`;
-      await notificationService.sendSMS(fee.students.parent_phone, smsMessage);
-
-      // Send WhatsApp
-      await notificationService.sendWhatsApp(fee.students.parent_phone, {
-        studentName: fee.students.name,
-        admissionNumber: fee.students.admission_number,
-        amount: amount,
-        schoolName: fee.schools.name,
-        receiptUrl: receiptUrl
-      });
+      try {
+        const smsMessage = `Payment of KES ${amount.toLocaleString()} received for ${fee.students.name}. Check email for receipt.`;
+        await notificationService.sendSMS(fee.students.parent_phone, smsMessage);
+      } catch (error) {
+        console.error('Failed to send SMS notification:', error);
+        // Continue with other notifications
+      }
     }
 
-    return { success: true };
+    // Send WhatsApp notification if parent phone exists
+    if (fee.students.parent_phone) {
+      try {
+        await notificationService.sendWhatsApp(fee.students.parent_phone, {
+          studentName: fee.students.name,
+          admissionNumber: fee.students.admission_number,
+          amount: amount,
+          schoolName: fee.schools.name,
+          receiptUrl: receiptUrl
+        });
+      } catch (error) {
+        console.error('Failed to send WhatsApp notification:', error);
+        // Continue with other notifications
+      }
+    }
+
+    return {
+      receiptHtml,
+      receiptUrl
+    };
   } catch (error) {
     console.error('Failed to generate receipt and send notifications:', error);
     throw error;

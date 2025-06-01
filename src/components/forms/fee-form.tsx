@@ -20,6 +20,8 @@ interface FeeFormData {
   due_date?: string | null
   fee_type?: string | null
   student_admission_number?: string | null
+  term?: string | null
+  academic_year?: string | null
 }
 
 interface FeeFormProps {
@@ -33,6 +35,8 @@ interface FeeFormProps {
     due_date?: string
     fee_type?: string
     student_admission_number?: string
+    term?: string
+    academic_year?: string
   }
   onSuccess?: () => void
 }
@@ -57,8 +61,15 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
     description: fee?.description || '',
     due_date: fee?.due_date ? new Date(fee.due_date) : null,
     fee_type: fee?.fee_type || null,
-    student_admission_number: fee?.student_admission_number || null
+    student_admission_number: fee?.student_admission_number || null,
+    term: fee?.term || null,
+    academic_year: fee?.academic_year || null
   })
+
+  // Log school context on mount
+  useEffect(() => {
+    console.log('FeeForm mounted with school context:', school)
+  }, [school])
 
   // Handle online/offline state changes
   useEffect(() => {
@@ -78,13 +89,25 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
     e.preventDefault()
     if (isSubmitting) return
 
-    console.log('Form submitted, online status:', isOnline)
+    if (!school?.id) {
+      console.error('No school context available')
+      toast.error('School context is required')
+      return
+    }
+
+    console.log('Form submitted with context:', { 
+      online: isOnline, 
+      schoolId: school.id,
+      formData 
+    })
+    
     setIsSubmitting(true)
     
     try {
       // Convert dates to ISO strings for API
       const apiData: FeeFormData = {
         ...formData,
+        school_id: school.id, // Ensure school_id is set
         date: formData.date.toISOString(),
         due_date: formData.due_date?.toISOString() || null
       }
@@ -219,12 +242,47 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description (Optional)</Label>
+            <Label htmlFor="fee_type">Fee Type</Label>
+            <Input
+              id="fee_type"
+              value={formData.fee_type || ''}
+              onChange={(e) => setFormData({ ...formData, fee_type: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="term">Term</Label>
+            <Select
+              value={formData.term || ''}
+              onValueChange={(value) => setFormData({ ...formData, term: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Term 1">Term 1</SelectItem>
+                <SelectItem value="Term 2">Term 2</SelectItem>
+                <SelectItem value="Term 3">Term 3</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="academic_year">Academic Year</Label>
+            <Input
+              id="academic_year"
+              value={formData.academic_year || ''}
+              onChange={(e) => setFormData({ ...formData, academic_year: e.target.value })}
+              placeholder="e.g., 2024"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
             <Input
               id="description"
-              value={formData.description}
+              value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Enter fee description"
             />
           </div>
 

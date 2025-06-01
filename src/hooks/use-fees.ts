@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/use-auth'
 import type { FeeCreate, FeeUpdate, FeeFilters } from '@/types/fee'
 import { getDB } from '@/lib/indexeddb/client'
 import { addToSyncQueue } from '@/lib/sync/sync-service'
+import { supabase } from '@/lib/supabase'
 
 export function useFees(filters?: FeeFilters) {
   const { school } = useAuth()
@@ -143,11 +144,14 @@ export function useFee(id: string) {
   const { user, school } = useAuth()
 
   return useQuery({
-    queryKey: ['fees', id],
+    queryKey: ['fees', id, school?.id],
     queryFn: async () => {
       if (!user || !school) {
+        console.error('Auth context missing:', { user, school })
         throw new Error('User must be authenticated and have a school to fetch fee')
       }
+
+      console.log('Fetching fee with context:', { feeId: id, schoolId: school.id })
 
       if (!navigator.onLine) {
         const db = await getDB()
@@ -156,11 +160,26 @@ export function useFee(id: string) {
         return fee
       }
 
-      return feeService.getFee(id)
+      try {
+        // Use the fee service instead of direct Supabase query
+        const fee = await feeService.getFee(id)
+        
+        if (!fee) {
+          console.error('Fee not found:', { feeId: id, schoolId: school.id })
+          throw new Error('Fee not found')
+        }
+
+        return fee
+      } catch (error) {
+        console.error('Error in fee fetch process:', error)
+        throw error
+      }
     },
-    enabled: !!user && !!school,
-    retry: 1,
-    retryDelay: 1000,
+    enabled: !!school && !!id,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    gcTime: 10 * 60 * 1000, // Keep data in cache for 10 minutes
   })
 }
 
@@ -171,6 +190,7 @@ export function useCreateFee() {
   return useMutation({
     mutationFn: async (data: FeeCreate) => {
       if (!user || !school) {
+        console.error('Auth context missing in createFee:', { user, school })
         throw new Error('User must be authenticated and have a school to create a fee')
       }
 
@@ -192,8 +212,12 @@ export function useCreateFee() {
         due_date: data.due_date || null,
         description: data.description || null,
         fee_type: data.fee_type || null,
-        student_admission_number: data.student_admission_number || null
+        student_admission_number: data.student_admission_number || null,
+        term: data.term || null,
+        academic_year: data.academic_year || null
       }
+
+      console.log('Creating fee with data:', feeData)
 
       if (!navigator.onLine) {
         console.log('Offline mode detected in useCreateFee, using createFeeOffline')
@@ -203,7 +227,8 @@ export function useCreateFee() {
       console.log('Online mode detected in useCreateFee, using feeService')
       return feeService.createFee(feeData)
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      console.log('Fee created successfully:', data)
       if (!navigator.onLine) {
         // When offline, update cache directly with data from IndexedDB
         const db = await getDB()
@@ -322,13 +347,23 @@ export function useProcessPayment() {
         throw new Error('Cannot process payment for fee from a different school')
       }
 
-      return feeService.processPayment(feeId, {
+      const result = await feeService.processPayment(feeId, {
         amount,
         paymentMethod,
         paymentDetails
       })
+
+      // Get the receipt data from the notification service
+      const { generateReceiptAndNotify } = await import('@/app/actions/payment-notifications')
+      const receiptData = await generateReceiptAndNotify(feeId, result.payment_reference || `TXN-${feeId}-${Date.now()}`, amount)
+
+      return {
+        ...result,
+        receiptHtml: receiptData.receiptHtml,
+        receiptUrl: receiptData.receiptUrl
+      }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['fees'] })
       queryClient.invalidateQueries({ queryKey: ['fees', variables.feeId] })
     }

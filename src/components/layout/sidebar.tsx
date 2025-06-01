@@ -35,16 +35,16 @@ export function Sidebar() {
 
   return (
     <div className={cn(
-      "flex h-full flex-col border-r bg-background transition-all duration-300",
+      "flex h-full flex-col border-r bg-background/50 backdrop-blur-sm transition-all duration-300",
       isCollapsed ? "w-16" : "w-64"
     )}>
       <div className="flex h-14 items-center justify-between border-b px-4">
-        {!isCollapsed && <span className="font-semibold">Navigation</span>}
+        {!isCollapsed && <span className="font-semibold transition-all duration-300 hover:text-primary">Navigation</span>}
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="ml-auto"
+          className="ml-auto transition-all duration-300 hover:scale-110"
         >
           {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
@@ -60,12 +60,16 @@ export function Sidebar() {
                 <Button
                   variant={isActive ? 'secondary' : 'ghost'}
                   className={cn(
-                    'w-full justify-start hover:border-2 hover:border-yellow-400 hover:bg-transparent',
-                    isActive && 'border-2 border-green-500 bg-transparent',
+                    'w-full justify-start transition-all duration-300 ease-in-out group',
+                    'hover:scale-105 hover:text-primary hover:bg-background/80',
+                    isActive && 'bg-background/80 text-primary',
                     isCollapsed && 'justify-center px-2'
                   )}
                 >
-                  <item.icon className={cn("h-4 w-4", !isCollapsed && "mr-2")} />
+                  <item.icon className={cn(
+                    "h-4 w-4 transition-transform duration-300 group-hover:scale-110",
+                    !isCollapsed && "mr-2"
+                  )} />
                   {!isCollapsed && item.name}
                 </Button>
               </Link>

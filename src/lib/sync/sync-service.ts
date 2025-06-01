@@ -47,20 +47,13 @@ export async function addToSyncQueue(
 
 export class SyncService {
   private static instance: SyncService | null = null
-  private isOnline: boolean = navigator.onLine
   private syncInterval: NodeJS.Timeout | null = null
   private isSyncing: boolean = false
   private syncPromise: Promise<void> | null = null
   private processedItems: Set<string> = new Set()
 
   private constructor() {
-    // Remove any existing listeners to prevent duplicates
-    window.removeEventListener('online', this.handleOnline)
-    window.removeEventListener('offline', this.handleOffline)
-    
-    // Add listeners
-    window.addEventListener('online', this.handleOnline)
-    window.addEventListener('offline', this.handleOffline)
+    // No event listeners needed
   }
 
   public static getInstance(): SyncService {
@@ -70,17 +63,6 @@ export class SyncService {
     return SyncService.instance
   }
 
-  private handleOnline = () => {
-    console.log('Online event triggered')
-    this.isOnline = true
-    this.syncData()
-  }
-
-  private handleOffline = () => {
-    console.log('Offline event triggered')
-    this.isOnline = false
-  }
-
   public startSync(interval: number = 5 * 60 * 1000) { // Default 5 minutes
     console.log('Starting sync service')
     if (this.syncInterval) {
@@ -88,9 +70,7 @@ export class SyncService {
       clearInterval(this.syncInterval)
     }
     this.syncInterval = setInterval(() => {
-      if (this.isOnline) {
-        this.syncData()
-      }
+      this.syncData()
     }, interval)
   }
 
@@ -304,8 +284,6 @@ export class SyncService {
   // Clean up method to be called when the app is unmounted
   public cleanup() {
     this.stopSync()
-    window.removeEventListener('online', this.handleOnline)
-    window.removeEventListener('offline', this.handleOffline)
     SyncService.instance = null
   }
 }

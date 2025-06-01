@@ -165,6 +165,7 @@ export type Database = {
       }
       fees: {
         Row: {
+          academic_year: string | null
           amount: number
           amount_paid: number | null
           created_at: string
@@ -184,9 +185,11 @@ export type Database = {
           student_id: string
           student_name: string | null
           sync_status: string | null
+          term: string | null
           updated_at: string
         }
         Insert: {
+          academic_year?: string | null
           amount: number
           amount_paid?: number | null
           created_at?: string
@@ -206,9 +209,11 @@ export type Database = {
           student_id: string
           student_name?: string | null
           sync_status?: string | null
+          term?: string | null
           updated_at?: string
         }
         Update: {
+          academic_year?: string | null
           amount?: number
           amount_paid?: number | null
           created_at?: string
@@ -228,6 +233,7 @@ export type Database = {
           student_id?: string
           student_name?: string | null
           sync_status?: string | null
+          term?: string | null
           updated_at?: string
         }
         Relationships: [

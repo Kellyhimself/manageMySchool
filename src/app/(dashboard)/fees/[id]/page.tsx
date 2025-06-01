@@ -19,6 +19,8 @@ export default function FeeDetailPage({ params }: { params: Promise<{ id: string
   const { data: fee, isLoading } = useFee(resolvedParams.id)
   const { mutate: processPayment } = useProcessPayment()
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [receiptHtml, setReceiptHtml] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'bank' | 'cash'>('mpesa')
   const [bankDetails, setBankDetails] = useState({
     bank_name: '',
@@ -89,6 +91,13 @@ export default function FeeDetailPage({ params }: { params: Promise<{ id: string
           bank_account: bankDetails.bank_account,
           bank_slip_number: bankDetails.bank_slip_number
         }
+      }, {
+        onSuccess: (data: { receiptHtml?: string; receiptUrl?: string }) => {
+          if (data.receiptHtml) {
+            setReceiptHtml(data.receiptHtml)
+            setShowReceiptModal(true)
+          }
+        }
       })
     } else if (paymentMethod === 'mpesa') {
       if (!school?.payment_settings?.paybill_number) {
@@ -104,12 +113,26 @@ export default function FeeDetailPage({ params }: { params: Promise<{ id: string
           paybill_number: school.payment_settings.paybill_number,
           account_number: fee.student_id
         }
+      }, {
+        onSuccess: (data: { receiptHtml?: string; receiptUrl?: string }) => {
+          if (data.receiptHtml) {
+            setReceiptHtml(data.receiptHtml)
+            setShowReceiptModal(true)
+          }
+        }
       })
     } else if (paymentMethod === 'cash') {
       processPayment({
         feeId: resolvedParams.id,
         amount,
         paymentMethod: 'cash'
+      }, {
+        onSuccess: (data: { receiptHtml?: string; receiptUrl?: string }) => {
+          if (data.receiptHtml) {
+            setReceiptHtml(data.receiptHtml)
+            setShowReceiptModal(true)
+          }
+        }
       })
     }
     setShowPaymentModal(false)
@@ -354,6 +377,31 @@ export default function FeeDetailPage({ params }: { params: Promise<{ id: string
                 Confirm Payment
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showReceiptModal} onOpenChange={setShowReceiptModal}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Payment Receipt</DialogTitle>
+          </DialogHeader>
+          {receiptHtml && (
+            <div 
+              className="mt-4"
+              dangerouslySetInnerHTML={{ __html: receiptHtml }}
+            />
+          )}
+          <div className="flex justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowReceiptModal(false)}>
+              Close
+            </Button>
+            <Button 
+              className="ml-2"
+              onClick={() => window.print()}
+            >
+              Print Receipt
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

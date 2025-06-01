@@ -3,6 +3,7 @@ import { Providers } from './providers'
 import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { cn } from '@/lib/utils'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,7 +19,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={cn(
+        inter.className,
+        "min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-orange-50"
+      )}>
         <Providers>
           <Toaster />
           {children}

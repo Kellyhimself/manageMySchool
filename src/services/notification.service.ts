@@ -137,9 +137,35 @@ export class NotificationService {
   }
 
   public async sendWhatsApp(phoneNumber: string, templateData: WhatsAppTemplateData): Promise<boolean> {
+    if (!this.isValidPhoneNumber(phoneNumber)) {
+      throw new Error(`Invalid phone number format: ${phoneNumber}`);
+    }
+
+    const formattedPhone = this.formatPhoneNumber(phoneNumber);
     const message = `Dear Parent/Guardian,\n\nPayment confirmation for ${templateData.studentName} (Admission No: ${templateData.admissionNumber})\nAmount: KES ${templateData.amount}\nSchool: ${templateData.schoolName}\n\nReceipt: ${templateData.receiptUrl || 'Not available'}`;
-    
-    // For now, fall back to SMS since WhatsApp requires server-side implementation
-    return this.sendSMS(phoneNumber, message);
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/notifications/whatsapp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        phoneNumber: formattedPhone,
+        message
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`WhatsApp API returned ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      console.info(`WhatsApp message sent successfully to ${formattedPhone.slice(-4)}`);
+      return true;
+    } else {
+      throw new Error(result.error || 'Failed to send WhatsApp message');
+    }
   }
 } 
