@@ -142,7 +142,7 @@ export default function NewFeePage() {
       <div className="max-w-4xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl sm:text-2xl font-semibold">Create New Fees</CardTitle>
+            <CardTitle className="text-2xl font-semibold">Create New Fees</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoadingStudents ? (
@@ -152,7 +152,7 @@ export default function NewFeePage() {
             ) : (
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Fee Details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="amount">Amount (KES)</Label>
                     <Input

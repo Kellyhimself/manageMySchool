@@ -14,7 +14,7 @@ import { toast } from 'sonner'
 import type { Student } from '@/types/student'
 import { useQueryClient } from '@tanstack/react-query'
 import { getDB } from '@/lib/indexeddb/client'
-import { ALL_CLASS_OPTIONS, type ClassOption } from '@/lib/constants/classes'
+import { CLASS_OPTIONS } from '@/lib/constants/classes'
 
 const studentSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -138,10 +138,17 @@ export function StudentForm({ initialData, onSuccess }: StudentFormProps) {
                       <SelectValue placeholder="Select class" />
                     </SelectTrigger>
                     <SelectContent>
-                      {ALL_CLASS_OPTIONS.map((classOption) => (
-                        <SelectItem key={classOption} value={classOption}>
-                          {classOption}
-                        </SelectItem>
+                      {Object.entries(CLASS_OPTIONS).map(([category, classes]) => (
+                        <div key={category}>
+                          <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                            {category}
+                          </div>
+                          {classes.map((classOption) => (
+                            <SelectItem key={classOption} value={classOption}>
+                              {classOption}
+                            </SelectItem>
+                          ))}
+                        </div>
                       ))}
                     </SelectContent>
                   </Select>

@@ -10,11 +10,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Search } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { CLASS_OPTIONS } from '@/lib/constants/classes'
 
 export default function StudentsPage() {
   const { school, isLoading: isAuthLoading } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
-  const [classFilter, setClassFilter] = useState('')
+  const [classFilter, setClassFilter] = useState('all')
 
   useEffect(() => {
     console.log('Auth state:', { school, isAuthLoading })
@@ -23,7 +25,7 @@ export default function StudentsPage() {
   const { data: students, isLoading, error } = useStudents({
     schoolId: school?.id,
     search: searchQuery,
-    class: classFilter
+    class: classFilter === 'all' ? '' : classFilter
   })
 
   useEffect(() => {
@@ -86,12 +88,29 @@ export default function StudentsPage() {
 
           <div className="space-y-2">
             <Label htmlFor="class">Filter by Class</Label>
-            <Input
-              id="class"
-              placeholder="Enter class..."
+            <Select
               value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-            />
+              onValueChange={setClassFilter}
+            >
+              <SelectTrigger id="class">
+                <SelectValue placeholder="Select class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {Object.entries(CLASS_OPTIONS).map(([category, classes]) => (
+                  <div key={category}>
+                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                      {category}
+                    </div>
+                    {classes.map((classOption) => (
+                      <SelectItem key={classOption} value={classOption}>
+                        {classOption}
+                      </SelectItem>
+                    ))}
+                  </div>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -114,7 +133,11 @@ export default function StudentsPage() {
         </div>
       ) : students?.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-[30vh] space-y-4">
-          <p className="text-muted-foreground">No students found</p>
+          <p className="text-muted-foreground">
+            {searchQuery || classFilter 
+              ? 'No students found matching your search criteria'
+              : 'No students found'}
+          </p>
           <Button asChild>
             <Link href="/students/new">Add Your First Student</Link>
           </Button>

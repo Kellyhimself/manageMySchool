@@ -119,3 +119,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Sidebar popover animation */
+.animate-slide-in-from-top-left {
+  animation: slide-in-from-top-left 0.3s cubic-bezier(.4,0,.2,1);
+}
+@keyframes slide-in-from-top-left {
+  from { opacity: 0; transform: translate(-40px, -40px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}

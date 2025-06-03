@@ -21,7 +21,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={cn(
         inter.className,
-        "min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-orange-50"
+        "min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-orange-50 text-sm sm-mobile:text-base md-mobile:text-lg"
       )}>
         <Providers>
           <Toaster />

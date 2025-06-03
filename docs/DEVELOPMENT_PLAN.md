@@ -598,3 +598,11 @@ WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
 
 I lauched the app while online then switched to offline, then I tried to visit the /fees page while in that offline mode and it did not populate the fee cards. Is that something to do with the @use-fees.ts and the @fee.service.ts  not being offline or what? Or is it the Tanstack query provider or the @providers.tsx  which is wporking perfectly when online ?
+
+
+
+3. why is the tab bar/tab header or tab header container not displaying the other available tabs when on small screens, neither is it scrollable to tell the user if more tabs are available on horizontal scroll, in the /fees page. Take care because the other cards are supposed to be equal width with the screen sizes which is perfect at the moment, so dont change the whole container, just find a way to alter and make the tab header display all the tabs in small screen sizes. You may consider using a collapsible feature or change the tab header layout to one column grid on small devices below 480px. Or just make the tab bar scrollable without altering the other cards styling as they are responsive to screen sizes already.
+
+
+1. on screen above 480 px, the financial metrics cards should display in more grid columns eg 3 or for columns, not as it is
+2. style the tabtrigger container in the /fees page to have its nested elemnts scrollable but in one row even on smal screens

@@ -20,15 +20,18 @@ const toOfflineStudent = (student: SupabaseStudent): Student => {
 }
 
 export const studentService = {
-  async getStudents(schoolId: string, filters?: { class?: string }): Promise<Student[]> {
+  async getStudents(schoolId: string, filters?: { class?: string; search?: string }): Promise<Student[]> {
     if (!navigator.onLine) {
       const db = await getDB()
       const students = await db.getAllFromIndex('students', 'by-school', schoolId)
-      // Apply class filter to offline data
-      if (filters?.class) {
-        return students.filter(student => student.class === filters.class)
-      }
-      return students
+      // Apply filters to offline data
+      return students.filter(student => {
+        const matchesClass = !filters?.class || student.class === filters.class
+        const matchesSearch = !filters?.search || 
+          student.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+          (student.admission_number && student.admission_number.toLowerCase().includes(filters.search.toLowerCase()))
+        return matchesClass && matchesSearch
+      })
     }
 
     let query = supabase
@@ -39,6 +42,11 @@ export const studentService = {
     // Apply class filter if provided
     if (filters?.class) {
       query = query.eq('class', filters.class)
+    }
+
+    // Apply search filter if provided
+    if (filters?.search) {
+      query = query.or(`name.ilike.%${filters.search}%,admission_number.ilike.%${filters.search}%`)
     }
 
     const { data, error } = await query.order('created_at', { ascending: false })

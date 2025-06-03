@@ -21,13 +21,32 @@ export function useStudents(filters?: StudentFilters) {
         
         // If we're offline, return the cached data
         if (!navigator.onLine) {
-          return cachedStudents.sort((a, b) => 
+          let filteredStudents = cachedStudents;
+          
+          // Apply class filter if specified
+          if (filters?.class) {
+            filteredStudents = filteredStudents.filter(student => student.class === filters.class);
+          }
+          
+          // Apply search filter if specified
+          if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            filteredStudents = filteredStudents.filter(student => 
+              student.name.toLowerCase().includes(searchLower) ||
+              (student.admission_number && student.admission_number.toLowerCase().includes(searchLower))
+            );
+          }
+          
+          return filteredStudents.sort((a, b) => 
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
+          );
         }
         
         // If online, fetch fresh data and update IndexedDB
-        const freshStudents = await studentService.getStudents(school.id, { class: filters?.class })
+        const freshStudents = await studentService.getStudents(school.id, { 
+          class: filters?.class,
+          search: filters?.search 
+        })
         
         // Update IndexedDB with fresh data
         for (const student of freshStudents) {
@@ -39,10 +58,25 @@ export function useStudents(filters?: StudentFilters) {
         // If there's an error and we're offline, try to get data from IndexedDB
         if (!navigator.onLine) {
           const db = await getDB()
-          const students = await db.getAllFromIndex('students', 'by-school', school.id)
+          let students = await db.getAllFromIndex('students', 'by-school', school.id)
+          
+          // Apply class filter if specified
+          if (filters?.class) {
+            students = students.filter(student => student.class === filters.class);
+          }
+          
+          // Apply search filter if specified
+          if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            students = students.filter(student => 
+              student.name.toLowerCase().includes(searchLower) ||
+              (student.admission_number && student.admission_number.toLowerCase().includes(searchLower))
+            );
+          }
+          
           return students.sort((a, b) => 
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
+          );
         }
         throw error
       }

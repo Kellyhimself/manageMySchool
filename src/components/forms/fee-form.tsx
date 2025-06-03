@@ -178,15 +178,15 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
           <div className="space-y-2">
             <Label htmlFor="student_id">Student</Label>
             {isLoadingStudents ? (
-              <div className="text-sm text-muted-foreground">Loading students...</div>
+              <div className="text-base text-muted-foreground">Loading students...</div>
             ) : studentsError ? (
-              <div className="text-sm text-red-500">
+              <div className="text-base text-red-500">
                 {isOnline 
                   ? "Failed to load students. Please try again."
                   : "You're offline. Please check your connection."}
               </div>
             ) : !students || students.length === 0 ? (
-              <div className="text-sm text-muted-foreground">No students found</div>
+              <div className="text-base text-muted-foreground">No students found</div>
             ) : (
               <Select
                 value={formData.student_id}
@@ -291,7 +291,7 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
               type="button"
               variant="outline"
               onClick={() => onSuccess?.()}
-              className="w-full sm:w-auto"
+              className="w-auto"
               disabled={isLoading}
             >
               Cancel
@@ -299,7 +299,7 @@ export function FeeForm({ fee, onSuccess }: FeeFormProps) {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full sm:w-auto"
+              className="w-auto"
             >
               {isLoading
                 ? 'Saving...'

@@ -9,13 +9,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { User, Menu } from 'lucide-react'
-import { User as UserType } from '@supabase/supabase-js'
+import type { User } from '@/types/auth'
 import { School } from '@/types/school'
 import { useState } from 'react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sidebar } from './sidebar'
 
 interface HeaderProps {
-  user: UserType
+  user: User
   school: School
 }
 
@@ -26,6 +27,10 @@ export function Header({ user, school }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between">
+        {/* Sidebar Toggle Button - Now inside header */}
+        <div className="flex items-center">
+          <Sidebar />
+        </div>
         {/* School Name - Always visible */}
         <div className="flex items-center pl-4">
           <a className="flex items-center space-x-2 group" href="/">
